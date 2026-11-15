@@ -1,0 +1,24 @@
+name: OIDC claim probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    environment: probe
+    permissions:
+      id-token: write
+    steps:
+      - name: Print non-secret token claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          tok=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')
+          python3 - "$tok" <<'PY'
+          import base64, json, sys
+          p = sys.argv[1].split(".")[1]
+          c = json.loads(base64.urlsafe_b64decode(p + "=" * (-len(p) % 4)))
+          for k in ("sub", "aud", "job_workflow_ref", "workflow_ref", "environment", "runner_environment", "repository_id"):
+              print(k, "=", c.get(k))
+          PY
