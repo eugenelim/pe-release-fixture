@@ -1,0 +1,24 @@
+# Fixture-only negative probe: another workflow in the protected environment must not get the deploy role.
+name: Sandbox role probe
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    environment: sandbox
+    permissions:
+      id-token: write
+    env:
+      RELEASE_ROLE_ARN: ${{ secrets.RELEASE_ROLE_ARN }}
+      AWS_DEFAULT_REGION: us-east-1
+    steps:
+      - name: try-assume-deploy-role
+        shell: bash
+        run: |
+          set -uo pipefail
+          tok=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')
+          echo "::add-mask::$tok"
+          if aws sts assume-role-with-web-identity --role-arn "$RELEASE_ROLE_ARN" --role-session-name probe --web-identity-token "$tok" > /dev/null 2> err.txt; then echo "UNEXPECTED: role assumed"; exit 1; fi
+          grep -o 'AccessDenied[^:]*' err.txt | head -1
