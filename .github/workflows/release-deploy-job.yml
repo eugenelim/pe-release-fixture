@@ -53,6 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - id: verify-admission
+        name: verify-admission
         shell: bash
         run: |
           set -euo pipefail
@@ -111,6 +112,7 @@ jobs:
           python3 release-loop/scripts/release_admission.py verify admission.json --root work
           python3 release-loop/scripts/release_admission.py check-stage --stage pre-deploy --admission admission.json --review review-0.json --review review-1.json --root work
       - id: bind
+        name: bind
         shell: bash
         run: |
           set -euo pipefail
@@ -133,6 +135,7 @@ jobs:
           PY
           python3 release-loop/scripts/github_release.py bind --admission admission.json --controls controls.json --context context.json --attempt attempt.json --approvals approvals.json --environment-settings environment.json --prepare-run prepare-run.json --prepare-artifacts prepare-artifacts.json --artifact-archive artifact.zip --expect-admission-sha256 "$ADMISSION_SHA256" --root work --output binding.json --decision-output decision.json
       - id: credentials
+        name: credentials
         shell: bash
         run: |
           set -euo pipefail
@@ -158,6 +161,7 @@ jobs:
                   stream.write(key + '=' + value + '\n')
           PY
       - id: budget
+        name: budget
         shell: bash
         run: |
           set -euo pipefail
@@ -248,6 +252,7 @@ jobs:
           done < work/ops-versions.tsv
           python3 release-loop/scripts/github_release.py budget --root work --controls controls.json --listing listing.json --now "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       - id: audit
+        name: audit
         shell: bash
         run: |
           set -euo pipefail
@@ -289,6 +294,7 @@ jobs:
           VERSION=$(python3 -c 'import sys; sys.stdout.reconfigure(encoding="utf-8"); sys.stderr.reconfigure(encoding="utf-8"); import json; print(json.load(open("work/receipt.json"))["VersionId"])')
           aws s3api head-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$DECISION_KEY" --version-id "$VERSION" --checksum-mode ENABLED > work/audit-head.json
       - id: recheck
+        name: recheck
         shell: bash
         run: |
           set -euo pipefail
@@ -416,6 +422,7 @@ jobs:
           PY
           python3 release-loop/scripts/github_release.py recheck --root work --binding binding.json --decision decision.json --admission admission.json --controls controls.json --audit-receipt receipt.json --audit-head audit-head.json --audit-listing listing.json --live-snapshot live.json --workflows-root checkout --cloud-identity identity.json --payload example-payload=image-manifest.json --expect-role-arn-env RELEASE_ROLE_ARN --expect-account-env RELEASE_CLOUD_ACCOUNT --now "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       - id: mutate-object
+        name: mutate-object
         shell: bash
         run: |
           set -euo pipefail
@@ -445,6 +452,7 @@ jobs:
               Path('work/mutation-http.log').unlink(missing_ok=True)
           PY
       - id: observe
+        name: observe
         shell: bash
         run: |
           set -euo pipefail
@@ -465,6 +473,7 @@ jobs:
           Path('work/observed.json').write_text(json.dumps(observed), encoding='utf-8')
           PY
       - id: teardown
+        name: teardown
         if: always() && steps.recheck.outcome == 'success'
         shell: bash
         run: |
@@ -495,6 +504,7 @@ jobs:
           grep -q 'Not Found' work/absence.err
           touch work/torn-down
       - id: ops
+        name: ops
         if: always() && steps.audit.outcome == 'success'
         shell: bash
         env:
@@ -523,6 +533,7 @@ jobs:
           CHECKSUM=$(openssl dgst -sha256 -binary work/ops.json | base64 -w0)
           aws s3api put-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$OPS_KEY" --body work/ops.json --checksum-algorithm SHA256 --checksum-sha256 "$CHECKSUM" --metadata "marker=$MARKER" > work/put-ops.json
       - id: summary
+        name: summary
         if: always() && steps.recheck.outcome == 'success'
         shell: bash
         run: |
