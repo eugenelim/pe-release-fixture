@@ -65,7 +65,7 @@ jobs:
           candidate["evidence"].append(note)
           for evidence in candidate["evidence"]:
               evidence["sha256"] = handoff.hash_evidence(root, evidence["locator"])
-                    for check in candidate["checks"]:
+          for check in candidate["checks"]:
               check["subjects"] = [{"id": "app", "sha256": digest}]
 
           def emit(value: Any, indent: int = 0) -> str:
