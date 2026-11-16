@@ -445,6 +445,9 @@ restrict deployments to protected branches, and require a reviewed pull request,
 non-fast-forward protection and deletion protection on the release branch.
 The agent app can dispatch/read Actions but cannot write contents, workflows,
 environments, secrets, variables or administration; it cannot be a reviewer.
+Make the app public: the protected job reads its permissions from
+`GET /apps/<slug>`, which answers 404 for a private app, and `recheck` then
+refuses before any mutation.
 Set the repository's OIDC subject template as the owner:
 
 ```bash
