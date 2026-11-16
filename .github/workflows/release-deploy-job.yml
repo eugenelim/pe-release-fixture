@@ -206,7 +206,7 @@ jobs:
               done
             done < work/prefixes.txt
             python3 - "$count" <<'PY'
-          """Keep every captured version from both complete prefix streams."""
+          """Preserve every native page and its continuation markers."""
           import sys
           sys.stdout.reconfigure(encoding="utf-8")
           sys.stderr.reconfigure(encoding="utf-8")
@@ -214,11 +214,7 @@ jobs:
           import sys
           from pathlib import Path
           pages = [json.loads(Path('work/pages/' + str(i) + '.json').read_bytes()) for i in range(int(sys.argv[1]))]
-          combined = {'IsTruncated': False, 'Versions': [], 'DeleteMarkers': []}
-          for page in pages:
-              for field in ('Versions', 'DeleteMarkers'):
-                  combined[field].extend(page.get(field, []))
-          Path('work/listing.json').write_text(json.dumps([combined]), encoding='utf-8')
+          Path('work/listing.json').write_text(json.dumps(pages), encoding='utf-8')
           PY
           }
 
@@ -231,9 +227,10 @@ jobs:
           import json
           c = json.load(open('work/controls.json'))
           prefix = c['audit']['ops_prefix'].split(':::', 1)[1].split('/', 1)[1] + c['environment'] + '/'
-          for item in json.load(open('work/listing.json'))[0]['Versions']:
-              if item['Key'].startswith(prefix):
-                  print(item['Key'] + '\t' + item['VersionId'])
+          for page in json.load(open('work/listing.json')):
+              for item in page.get('Versions', []):
+                  if item['Key'].startswith(prefix):
+                      print(item['Key'] + '\t' + item['VersionId'])
           PY
           while IFS=$'\t' read -r key version; do
             aws s3api get-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$key" --version-id "$version" work/prior-ops.json > work/get-ops.json
@@ -244,9 +241,10 @@ jobs:
           from pathlib import Path
           path = Path('work/listing.json')
           pages = json.loads(path.read_bytes())
-          for item in pages[0]['Versions']:
-              if item['Key'] == os.environ['KEY'] and item['VersionId'] == os.environ['VERSION']:
-                  item['record'] = json.loads(Path('work/prior-ops.json').read_bytes())
+          for page in pages:
+              for item in page.get('Versions', []):
+                  if item['Key'] == os.environ['KEY'] and item['VersionId'] == os.environ['VERSION']:
+                      item['record'] = json.loads(Path('work/prior-ops.json').read_bytes())
           path.write_text(json.dumps(pages), encoding='utf-8')
           PY
           done < work/ops-versions.tsv
@@ -293,24 +291,6 @@ jobs:
           PY
           VERSION=$(python3 -c 'import sys; sys.stdout.reconfigure(encoding="utf-8"); sys.stderr.reconfigure(encoding="utf-8"); import json; print(json.load(open("work/receipt.json"))["VersionId"])')
           aws s3api head-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$DECISION_KEY" --version-id "$VERSION" --checksum-mode ENABLED > work/audit-head.json
-      - id: erasure-probe
-        name: erasure-probe
-        shell: bash
-        run: |
-          set -uo pipefail
-          # Fixture adaptation: as the deploy role, try to erase or weaken this run's decision version.
-          K=$(python3 -c 'import json; print(json.load(open("work/receipt.json"))["Key"])')
-          V=$(python3 -c 'import json; print(json.load(open("work/receipt.json"))["VersionId"])')
-          if aws s3api delete-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$K" --version-id "$V" > /dev/null 2> work/probe-delete.err; then echo "UNEXPECTED: version deleted"; exit 1; fi
-          echo "delete-version: $(grep -o 'AccessDenied' work/probe-delete.err | head -1)"
-          if aws s3api put-object-retention --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$K" --version-id "$V" --retention '{"Mode":"COMPLIANCE","RetainUntilDate":"2026-01-01T00:00:00Z"}' > /dev/null 2> work/probe-retention.err; then echo "UNEXPECTED: retention changed"; exit 1; fi
-          echo "shorten-retention: $(grep -o 'AccessDenied' work/probe-retention.err | head -1)"
-          aws s3api head-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$K" --version-id "$V" --checksum-mode ENABLED --output json > work/probe-head.json
-          python3 - <<'CHECK'
-          import json
-          h = json.load(open('work/probe-head.json')); r = json.load(open('work/receipt.json'))
-          print('same-version', h['VersionId'] == r['VersionId'], 'checksum-unchanged', h.get("ChecksumSHA256") == r.get("ChecksumSHA256"), 'lock', h.get('ObjectLockMode'), 'retain-until', h.get('ObjectLockRetainUntilDate'))
-          CHECK
       - id: recheck
         name: recheck
         shell: bash
@@ -357,7 +337,7 @@ jobs:
               done
             done < work/prefixes.txt
             python3 - "$count" <<'PY'
-          """Keep every captured version from both complete prefix streams."""
+          """Preserve every native page and its continuation markers."""
           import sys
           sys.stdout.reconfigure(encoding="utf-8")
           sys.stderr.reconfigure(encoding="utf-8")
@@ -365,11 +345,7 @@ jobs:
           import sys
           from pathlib import Path
           pages = [json.loads(Path('work/pages/' + str(i) + '.json').read_bytes()) for i in range(int(sys.argv[1]))]
-          combined = {'IsTruncated': False, 'Versions': [], 'DeleteMarkers': []}
-          for page in pages:
-              for field in ('Versions', 'DeleteMarkers'):
-                  combined[field].extend(page.get(field, []))
-          Path('work/listing.json').write_text(json.dumps([combined]), encoding='utf-8')
+          Path('work/listing.json').write_text(json.dumps(pages), encoding='utf-8')
           PY
           }
 

@@ -632,10 +632,13 @@ def _binding_codes(controls: dict[str, Any], workflows: dict[str, Any]) -> list[
     mutations = [index for index, name in enumerate(ids)
                  if isinstance(name, str) and name.startswith('mutate-')]
     if positions != sorted(positions) or not mutations or any(
-        index <= max(positions, default=-1) for index in mutations
+        index <= max(positions, default=-1)
+        or re.search(r'\b(?:always|failure|cancelled)\s*\(', str(steps[index].get('if', '')))
+        for index in mutations
     ):
         codes.append('binding-order')
-    if any('continue-on-error' in steps[index] for index in mutations):
+    if any('continue-on-error' in step for step in steps
+           if step.get('id') in chain or str(step.get('id', '')).startswith('mutate-')):
         codes.append('mutation-continues-on-error')
     environment = job.get('environment')
     if isinstance(environment, dict):
@@ -1518,13 +1521,14 @@ def recheck(args: Any, root: Path, parsed: dict[str, Any],
     identity = parsed['cloud-identity']
     role = os.environ.get(args.expect_role_arn_env, '')
     account = os.environ.get(args.expect_account_env, '')
-    match = re.fullmatch(r'arn:aws:iam::([0-9]{12}):role/([^/]+)', role)
+    match = re.fullmatch(r'arn:aws:iam::([0-9]{12}):role/(.+)', role)
     session = re.fullmatch(r'arn:aws:sts::([0-9]{12}):assumed-role/([^/]+)/([^/]+)',
                            str(identity.get('Arn', '')))
     if (args.expect_role_arn_env != controls['cloud']['role_secret']
             or args.expect_account_env != controls['cloud']['account_secret']
             or not match or not session or match[1] != account or session[1] != account
-            or match[2] != controls['cloud']['role_name'] or session[2] != match[2]
+            or match[2].rsplit('/', 1)[-1] != controls['cloud']['role_name']
+            or session[2] != controls['cloud']['role_name']
             or identity.get('Account') != account):
         raise Refusal('cloud-identity-mismatch', 'refused')
     _, current = _decision_versions(controls, parsed['audit-listing'], args.now)
@@ -1556,6 +1560,35 @@ def _effect_states(binding: dict[str, Any], controls: dict[str, Any],
     return result
 
 
+def _jobs_unstarted(response: Any, binding: dict[str, Any]) -> bool:
+    """Require complete same-attempt jobs and explicit unstarted mutation evidence."""
+    if not isinstance(response, dict):
+        return False
+    jobs = response.get('jobs')
+    if (not isinstance(jobs, list) or not jobs
+            or type(response.get('total_count')) is not int
+            or response['total_count'] != len(jobs)):
+        return False
+    mutations = []
+    for job in jobs:
+        if (not isinstance(job, dict)
+                or type(job.get('run_id')) is not int
+                or type(job.get('run_attempt')) is not int
+                or job['run_id'] != binding.get('run_id')
+                or job['run_attempt'] != binding.get('run_attempt')
+                or not isinstance(job.get('steps'), list)):
+            return False
+        for step in job['steps']:
+            if not isinstance(step, dict) or not isinstance(step.get('name'), str):
+                return False
+            if step['name'].startswith('mutate-'):
+                mutations.append(step)
+    return bool(mutations) and all(
+        (step.get('status') == 'queued' and step.get('conclusion') is None)
+        or (step.get('status') == 'completed' and step.get('conclusion') == 'skipped')
+        for step in mutations)
+
+
 def reconcile(args: Any, parsed: dict[str, Any]) -> dict[str, Any]:
     """Report observed effects; permit retries only with terminal run and ops evidence."""
     binding, controls, run = (parsed[name] for name in ('binding', 'controls', 'run'))
@@ -1576,13 +1609,7 @@ def reconcile(args: Any, parsed: dict[str, Any]) -> dict[str, Any]:
         if len(current) >= controls['max_executions']:
             report['issues'] = [{'code': 'execution-limit'}]
         else:
-            jobs = parsed['jobs'].get('jobs')
-            no_mutation = isinstance(jobs, list) and bool(jobs) and all(
-                isinstance(job, dict) and isinstance(job.get('steps'), list) and all(
-                    isinstance(step, dict) and isinstance(step.get('name'), str)
-                    and (not step['name'].startswith('mutate-') or
-                         step.get('status') == 'queued' or step.get('conclusion') == 'skipped')
-                    for step in job['steps']) for job in jobs)
+            no_mutation = _jobs_unstarted(parsed['jobs'], binding)
             if no_mutation or _terminal_ops(parsed.get('ops'), binding['run_id'],
                                              binding['run_attempt'], controls['effects']):
                 report['status'] = 'retry-allowed'

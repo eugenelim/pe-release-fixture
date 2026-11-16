@@ -205,7 +205,7 @@ jobs:
               done
             done < work/prefixes.txt
             python3 - "$count" <<'PY'
-          """Keep every captured version from both complete prefix streams."""
+          """Preserve every native page and its continuation markers."""
           import sys
           sys.stdout.reconfigure(encoding="utf-8")
           sys.stderr.reconfigure(encoding="utf-8")
@@ -213,11 +213,7 @@ jobs:
           import sys
           from pathlib import Path
           pages = [json.loads(Path('work/pages/' + str(i) + '.json').read_bytes()) for i in range(int(sys.argv[1]))]
-          combined = {'IsTruncated': False, 'Versions': [], 'DeleteMarkers': []}
-          for page in pages:
-              for field in ('Versions', 'DeleteMarkers'):
-                  combined[field].extend(page.get(field, []))
-          Path('work/listing.json').write_text(json.dumps([combined]), encoding='utf-8')
+          Path('work/listing.json').write_text(json.dumps(pages), encoding='utf-8')
           PY
           }
 
@@ -230,9 +226,10 @@ jobs:
           import json
           c = json.load(open('work/controls.json'))
           prefix = c['audit']['ops_prefix'].split(':::', 1)[1].split('/', 1)[1] + c['environment'] + '/'
-          for item in json.load(open('work/listing.json'))[0]['Versions']:
-              if item['Key'].startswith(prefix):
-                  print(item['Key'] + '\t' + item['VersionId'])
+          for page in json.load(open('work/listing.json')):
+              for item in page.get('Versions', []):
+                  if item['Key'].startswith(prefix):
+                      print(item['Key'] + '\t' + item['VersionId'])
           PY
           while IFS=$'\t' read -r key version; do
             aws s3api get-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$key" --version-id "$version" work/prior-ops.json > work/get-ops.json
@@ -243,9 +240,10 @@ jobs:
           from pathlib import Path
           path = Path('work/listing.json')
           pages = json.loads(path.read_bytes())
-          for item in pages[0]['Versions']:
-              if item['Key'] == os.environ['KEY'] and item['VersionId'] == os.environ['VERSION']:
-                  item['record'] = json.loads(Path('work/prior-ops.json').read_bytes())
+          for page in pages:
+              for item in page.get('Versions', []):
+                  if item['Key'] == os.environ['KEY'] and item['VersionId'] == os.environ['VERSION']:
+                      item['record'] = json.loads(Path('work/prior-ops.json').read_bytes())
           path.write_text(json.dumps(pages), encoding='utf-8')
           PY
           done < work/ops-versions.tsv
@@ -338,7 +336,7 @@ jobs:
               done
             done < work/prefixes.txt
             python3 - "$count" <<'PY'
-          """Keep every captured version from both complete prefix streams."""
+          """Preserve every native page and its continuation markers."""
           import sys
           sys.stdout.reconfigure(encoding="utf-8")
           sys.stderr.reconfigure(encoding="utf-8")
@@ -346,11 +344,7 @@ jobs:
           import sys
           from pathlib import Path
           pages = [json.loads(Path('work/pages/' + str(i) + '.json').read_bytes()) for i in range(int(sys.argv[1]))]
-          combined = {'IsTruncated': False, 'Versions': [], 'DeleteMarkers': []}
-          for page in pages:
-              for field in ('Versions', 'DeleteMarkers'):
-                  combined[field].extend(page.get(field, []))
-          Path('work/listing.json').write_text(json.dumps([combined]), encoding='utf-8')
+          Path('work/listing.json').write_text(json.dumps(pages), encoding='utf-8')
           PY
           }
 

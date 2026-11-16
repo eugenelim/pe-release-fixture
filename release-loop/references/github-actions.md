@@ -45,7 +45,7 @@ There is no weaker fallback.
 | Control | `met` only when | Codes when not met |
 | --- | --- | --- |
 | `trusted-execution` | The prepare and deploy workflows trigger only on `workflow_dispatch` and the deploy-job workflow only on `workflow_call`; the deploy workflow has one job, which calls the deploy-job workflow by its local `./` path and passes secrets by name; every workflow and job declares `permissions`, the prepare job's set is `contents: read` and `actions: read` at most, and the deploy job's set is a subset of `contents: read`, `actions: read`, `id-token: write`; every `uses:` (step or reusable workflow) is a local `./` path, `owner/repo[/path]@<40-hex>` or `docker://…@sha256:<64-hex>`; no `secrets: inherit`; no `run:` text contains `${{`; the release branch's active rules block non-fast-forward updates and deletion and require a pull request with at least one approving review | `untrusted-trigger`, `permissions-broad`, `permissions-undeclared`, `unpinned-action`, `secrets-inherited`, `expression-in-run`, `branch-unprotected` |
-| `candidate-binding` | The deploy-job workflow's single job has steps with ids `verify-admission`, `bind`, `credentials`, `budget`, `audit` and `recheck` in that order before every step whose id starts `mutate-`; no `mutate-` step sets `continue-on-error`; the job's `environment` equals the controls environment; the dispatch inputs are exactly `prepare_run_id`, `admission_sha256` and `pre_deploy_reviews`, passed unchanged to the deploy-job workflow | `binding-step-missing`, `binding-order`, `mutation-continues-on-error`, `environment-mismatch`, `inputs-mismatch` |
+| `candidate-binding` | The deploy-job workflow's single job has steps with ids `verify-admission`, `bind`, `credentials`, `budget`, `audit` and `recheck` in that order before every step whose id starts `mutate-`; no prerequisite or `mutate-` step sets `continue-on-error`; mutation conditions contain no `always()`, `failure()` or `cancelled()` override; the job's `environment` equals the controls environment; the dispatch inputs are exactly `prepare_run_id`, `admission_sha256` and `pre_deploy_reviews`, passed unchanged to the deploy-job workflow | `binding-step-missing`, `binding-order`, `mutation-continues-on-error`, `environment-mismatch`, `inputs-mismatch` |
 | `human-approval` | The environment has a `required_reviewers` rule whose reviewers are all users (at least one), `prevent_self_review: true`, `can_admins_bypass: false`, and a deployment branch policy with `protected_branches: true`; the agent is a GitHub App and is not a reviewer; the app holds none of `administration`, `environments`, `secrets`, `actions_variables`, `workflows` or `contents: write` | `reviewers-missing`, `team-reviewer-unsupported`, `self-review-allowed`, `admin-bypass`, `branch-policy-open`, `agent-is-reviewer`, `agent-kind-unsupported`, `agent-can-reconfigure` |
 | `serialization` | The deploy-job workflow job's `concurrency.group` equals the controls `concurrency_group` and `cancel-in-progress` is `false`; the target policy of every effect resource denies every write action to every principal other than the deploy role | `concurrency-missing`, `cancel-in-progress`, `writers-not-excluded` |
 | `credentials` | The role trust policy has one statement: `Allow` `sts:AssumeRoleWithWebIdentity` for the GitHub OIDC provider principal, with `StringEquals` on the audience and on `sub` equal to `repo:<owner>/<name>:environment:<env>:job_workflow_ref:<owner>/<name>/<deploy_job_workflow>@refs/heads/<release_branch>` or its immutable form `repo:<owner>@<owner-id>/<name>@<repository_id>:…`; the snapshot's OIDC subject template includes exactly `repo`, `context` and `job_workflow_ref`; the mutable-name form also needs `StringEquals` on `repository_id`; every role permission statement is `Allow`, with actions in `allowed_actions` and resources only the effect resources, the audit store's decision and ops prefixes, read-only configuration reads of the audit and target stores, and read-only inspection of the role itself (`iam:GetRole`, `iam:ListRolePolicies`, `iam:GetRolePolicy`, `iam:ListAttachedRolePolicies` on its own ARN); the role has inline policies only, so no attached managed policy exists to inspect; no action or resource is `*` | `trust-open`, `trust-subject-mismatch`, `subject-template-mismatch`, `repository-id-unpinned`, `permissions-exceed-allowlist`, `wildcard-permission` |
@@ -110,6 +110,12 @@ Only `aws-s3-object` effects are supported: a single synchronous write whose res
 - `proceed-to-observe` when every effect is `applied`;
 - `retry-allowed` only when the run is `completed`, every effect is `absent`, the listing leaves at least one execution in the window, and either the ops record shows each mutation's terminal outcome or the jobs response shows that no `mutate-` step started;
 - otherwise `pause`, including a `mutate-` step that started with no ops record.
+
+Without terminal ops, the jobs response must have `total_count` equal to the
+number of returned jobs, and every job must carry the binding's `run_id`
+and `run_attempt`. A response with no `mutate-` steps is insufficient.
+Every reported mutation must be `queued` with no conclusion or `completed`
+with conclusion `skipped`; conflicting status and conclusion fields pause recovery.
 
 A retry is a new dispatch with a new approval; it counts toward `max_executions`. Workflow records cannot prove exactly-once effects, and the reference says so.
 
@@ -339,8 +345,10 @@ aws s3api get-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "
 ```
 
 Use `capture_listing` in the deploy-job example to loop over both streams,
-carry both markers and retain all `Versions` and `DeleteMarkers`. It combines
-only complete streams into a one-element page array with `IsTruncated: false`.
+carry both markers and retain all `Versions` and `DeleteMarkers`. Save each
+native page unchanged and write the pages in capture order as one JSON list.
+Each page holds at most 1,000 versions; the list holds at most 1,000 pages,
+and the complete input must still fit the 1,048,576-byte input limit.
 Never remove a truncation flag to claim completeness or drop noncurrent versions.
 Fetch each prior ops body by version id and add `record` to that version entry.
 Keep provider `LastModified` times; never replace them with capture times.
