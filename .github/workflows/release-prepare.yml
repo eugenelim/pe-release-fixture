@@ -52,7 +52,7 @@ jobs:
           candidate["candidate_id"] = "image-" + os.environ["GITHUB_RUN_ID"]
           candidate["created_at"] = now
           candidate["target"] = {"environment": "sandbox", "account": "example-sandbox"}
-          candidate["sources"][0]["uri"] = os.environ["GITHUB_SERVER_URL"] + "/" + os.environ["GITHUB_REPOSITORY"]
+          candidate["sources"][0]["repository"] = os.environ["GITHUB_SERVER_URL"] + "/" + os.environ["GITHUB_REPOSITORY"]
           candidate["sources"][0]["revision"] = os.environ["GITHUB_SHA"]
           candidate["components"][0]["image_ref"] = (
               "registry.example.com/app:v1.0.0@" + digest
