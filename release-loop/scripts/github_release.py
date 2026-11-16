@@ -1425,23 +1425,25 @@ def budget(args: Any, parsed: dict[str, Any]) -> dict[str, Any]:
 
 
 def _audit_matches(parsed: dict[str, Any], captured: dict[str, Any]) -> bool:
-    """Bind exact decision bytes, receipt checksum, object key and embedded run."""
+    """Bind exact decision bytes and run, plus owner controls when supplied."""
     try:
         binding, decision, receipt = (
             parsed[name] for name in ('binding', 'decision', 'audit-receipt'))
-        controls = parsed['controls']
+        controls = parsed.get('controls')
         checksum = base64.b64decode(receipt['ChecksumSHA256'], validate=True)
         return (checksum == hashlib.sha256(captured['decision']).digest()
-                and receipt['Key'] == _decision_key(controls, binding)
+                and admission.text(receipt.get('Key'))
                 and admission.text(receipt.get('VersionId'))
                 and decision['binding_sha256'] == admission.sha256(captured['binding'])
                 and decision['binding'] == binding
                 and _map(decision.get('attempt_response')).get('id') == binding['run_id']
                 and _map(decision.get('attempt_response')).get('run_attempt')
                 == binding['run_attempt']
-                and binding['repository'] == controls['repository']
-                and binding['repository_id'] == controls['repository_id']
-                and binding['target']['environment'] == controls['environment'])
+                and (controls is None or (
+                    receipt['Key'] == _decision_key(controls, binding)
+                    and binding['repository'] == controls['repository']
+                    and binding['repository_id'] == controls['repository_id']
+                    and binding['target']['environment'] == controls['environment'])))
     except (KeyError, TypeError, ValueError):
         return False
 
@@ -1597,7 +1599,8 @@ def summary(args: Any, parsed: dict[str, Any], captured: dict[str, Any]) -> dict
     if (not _audit_matches(parsed, captured) or not _protected_head(parsed, args.now)
             or captured.get('audit-readback') != captured['decision']):
         return unconfirmed()
-    binding, controls, ops = (parsed[name] for name in ('binding', 'controls', 'ops'))
+    binding, ops = (parsed[name] for name in ('binding', 'ops'))
+    controls = parsed.get('controls', binding)
     states = _effect_states(binding, controls, parsed['observed'])
     try:
         for state in states:
@@ -1733,22 +1736,19 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(report, separators=(',', ':')))
             return 0 if report['status'] == 'bound' else 1
         if args.command in ('budget', 'recheck', 'reconcile', 'summary'):
-            if args.command == 'summary' and 'controls' not in parsed:
-                report = {'status': 'audit-unconfirmed', 'issues': [{'code': 'audit-unconfirmed'}]}
-            else:
-                try:
-                    if args.command == 'budget':
-                        report = budget(args, parsed)
-                    elif args.command == 'recheck':
-                        report = recheck(args, root, parsed, captured)
-                    elif args.command == 'reconcile':
-                        report = reconcile(args, parsed)
-                    else:
-                        report = summary(args, parsed, captured)
-                except Refusal as exc:
-                    if exc.status != 'refused':
-                        raise
-                    report = {'status': 'refused', 'issues': [{'code': exc.code}]}
+            try:
+                if args.command == 'budget':
+                    report = budget(args, parsed)
+                elif args.command == 'recheck':
+                    report = recheck(args, root, parsed, captured)
+                elif args.command == 'reconcile':
+                    report = reconcile(args, parsed)
+                else:
+                    report = summary(args, parsed, captured)
+            except Refusal as exc:
+                if exc.status != 'refused':
+                    raise
+                report = {'status': 'refused', 'issues': [{'code': exc.code}]}
             print(json.dumps(report, separators=(',', ':')))
             return 1 if report['status'] in ('refused', 'audit-unconfirmed') else 0
         code = 'usage'

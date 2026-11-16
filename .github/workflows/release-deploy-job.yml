@@ -293,6 +293,24 @@ jobs:
           PY
           VERSION=$(python3 -c 'import sys; sys.stdout.reconfigure(encoding="utf-8"); sys.stderr.reconfigure(encoding="utf-8"); import json; print(json.load(open("work/receipt.json"))["VersionId"])')
           aws s3api head-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$DECISION_KEY" --version-id "$VERSION" --checksum-mode ENABLED > work/audit-head.json
+      - id: erasure-probe
+        name: erasure-probe
+        shell: bash
+        run: |
+          set -uo pipefail
+          # Fixture adaptation: as the deploy role, try to erase or weaken this run's decision version.
+          K=$(python3 -c 'import json; print(json.load(open("work/receipt.json"))["Key"])')
+          V=$(python3 -c 'import json; print(json.load(open("work/receipt.json"))["VersionId"])')
+          if aws s3api delete-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$K" --version-id "$V" > /dev/null 2> work/probe-delete.err; then echo "UNEXPECTED: version deleted"; exit 1; fi
+          echo "delete-version: $(grep -o 'AccessDenied' work/probe-delete.err | head -1)"
+          if aws s3api put-object-retention --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$K" --version-id "$V" --retention '{"Mode":"COMPLIANCE","RetainUntilDate":"2026-01-01T00:00:00Z"}' > /dev/null 2> work/probe-retention.err; then echo "UNEXPECTED: retention changed"; exit 1; fi
+          echo "shorten-retention: $(grep -o 'AccessDenied' work/probe-retention.err | head -1)"
+          aws s3api head-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_AUDIT_BUCKET" --key "$K" --version-id "$V" --checksum-mode ENABLED --output json > work/probe-head.json
+          python3 - <<'CHECK'
+          import json
+          h = json.load(open('work/probe-head.json')); r = json.load(open('work/receipt.json'))
+          print('same-version', h['VersionId'] == r['VersionId'], 'checksum-unchanged', h.get("ChecksumSHA256") == r.get("ChecksumSHA256"), 'lock', h.get('ObjectLockMode'), 'retain-until', h.get('ObjectLockRetainUntilDate'))
+          CHECK
       - id: recheck
         name: recheck
         shell: bash
@@ -456,8 +474,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Fixture adaptation: hold observe so an interruption can land after the mutation.
-          sleep 45
           aws s3api get-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_TARGET_BUCKET" --key releases/current.json --checksum-mode ENABLED work/observed-payload.json > work/target-head.json
           python3 - <<'PY'
           """Observe exact payload bytes and marker before cleanup."""
