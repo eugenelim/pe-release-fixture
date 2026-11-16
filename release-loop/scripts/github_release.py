@@ -722,7 +722,8 @@ def _effect_listing(resource: str, condition: Any, effects: set[str]) -> bool:
     """
     keys = {_s3(effect)[2] for effect in effects if _s3(effect)[1] == resource}
     patterns = _strings(_map(_map(condition).get('StringEquals')).get('s3:prefix'))
-    return bool(keys) and set(_map(condition)) == {'StringEquals'} and bool(patterns) and set(patterns) <= keys
+    exact = set(_map(condition)) == {'StringEquals'}
+    return bool(keys) and exact and bool(patterns) and set(patterns) <= keys
 
 
 def _permission_codes(
@@ -1317,20 +1318,29 @@ def _versions(listing: Any) -> list[dict[str, Any]]:
     """Validate a complete saved page stream and keep noncurrent object versions.
 
     Ops versions may carry a `record` containing the separately captured body.
-    A truncated page requires a following page; the final page must be complete.
+    Continuation markers must chain; each prefix stream starts with empty markers
+    and ends with an untruncated page.
     """
     try:
         if not isinstance(listing, list) or not listing:
             raise ValueError('pages required')
         versions = []
         seen = set()
+        expected_markers = ('', '')
         for index, page in enumerate(listing):
             if (not isinstance(page, dict) or type(page.get('IsTruncated')) is not bool
                     or not isinstance(page.get('Versions'), list)
                     or not isinstance(page.get('DeleteMarkers', []), list)):
                 raise ValueError('malformed page')
-            if index and not listing[index - 1]['IsTruncated']:
-                raise ValueError('unexpected page')
+            markers = (page.get('KeyMarker', ''), page.get('VersionIdMarker', ''))
+            if markers != expected_markers:
+                raise ValueError('missing page')
+            expected_markers = ('', '')
+            if page['IsTruncated']:
+                if not all(admission.text(page.get(name))
+                           for name in ('NextKeyMarker', 'NextVersionIdMarker')):
+                    raise ValueError('missing continuation markers')
+                expected_markers = (page['NextKeyMarker'], page['NextVersionIdMarker'])
             if page['IsTruncated'] and index + 1 == len(listing):
                 raise ValueError('missing continuation')
             for item in page['Versions'] + page.get('DeleteMarkers', []):

@@ -456,6 +456,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Fixture adaptation: hold observe so an interruption can land after the mutation.
+          sleep 45
           aws s3api get-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_TARGET_BUCKET" --key releases/current.json --checksum-mode ENABLED work/observed-payload.json > work/target-head.json
           python3 - <<'PY'
           """Observe exact payload bytes and marker before cleanup."""
