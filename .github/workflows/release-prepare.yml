@@ -23,7 +23,7 @@ jobs:
           cp release-loop/assets/image-only-ci-caller/* candidate/
           # Fixture adaptation: real provenance and the owner's operations note as evidence.
           cp release/operations-note.md candidate/operations-note.md
-          gh attestation verify candidate/image-manifest.json --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-build.yml" --format json > candidate/provenance-attestation.json
+          gh attestation verify candidate/image-manifest.json --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-build.yml" --source-digest "$GITHUB_SHA" --format json > candidate/provenance-attestation.json
           python3 - <<'PY'
           """Illustrate writing a candidate from collected, local CI evidence."""
           import importlib.util
@@ -52,6 +52,7 @@ jobs:
           candidate["candidate_id"] = "image-" + os.environ["GITHUB_RUN_ID"]
           candidate["created_at"] = now
           candidate["target"] = {"environment": "sandbox", "account": "example-sandbox"}
+          candidate["sources"][0]["uri"] = os.environ["GITHUB_SERVER_URL"] + "/" + os.environ["GITHUB_REPOSITORY"]
           candidate["sources"][0]["revision"] = os.environ["GITHUB_SHA"]
           candidate["components"][0]["image_ref"] = (
               "registry.example.com/app:v1.0.0@" + digest

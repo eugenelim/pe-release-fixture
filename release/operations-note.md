@@ -15,8 +15,8 @@ Owner: eugenelim (repository owner and AWS sandbox owner). Recorded 2026-11-15.
 
 ## Cost bound
 - Controls allow at most 20 mutating executions per one-day window.
-- Each execution makes one PUT, one GET and one DELETE on one object of at most 1,024 bytes, plus one decision write and one ops write of a few kilobytes each.
-- The worst case per day is under 100 S3 requests and well under 1 MB stored, a cost of less than USD 0.01.
+- Each execution makes about 40 S3 and IAM requests: the budget and recheck listings, one GET per retained ops version, the decision and ops writes, live settings reads, the payload write, observation, teardown delete and absence check, and the summary read-back. The object is at most 1,024 bytes; decision and ops records are a few kilobytes each.
+- At the limit that is under 2,000 requests a day, growing by one GET per retained ops version, and well under 1 MB stored: less than USD 0.01 a day.
 - The runner job is capped at 20 minutes and the AWS CLI at 3 attempts.
 
 ## Audit retention

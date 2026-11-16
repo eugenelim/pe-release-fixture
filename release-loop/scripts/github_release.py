@@ -714,6 +714,17 @@ def _listing_scoped(condition: Any, prefixes: list[str]) -> bool:
     return False
 
 
+def _effect_listing(resource: str, condition: Any, effects: set[str]) -> bool:
+    """Allow listing an effect's bucket only for that effect's exact key.
+
+    Without list permission S3 answers a missing key with 403, so teardown could
+    not tell a deleted effect from a refused read.
+    """
+    keys = {_s3(effect)[2] for effect in effects if _s3(effect)[1] == resource}
+    patterns = _strings(_map(_map(condition).get('StringEquals')).get('s3:prefix'))
+    return bool(keys) and set(_map(condition)) == {'StringEquals'} and bool(patterns) and set(patterns) <= keys
+
+
 def _permission_codes(
     controls: dict[str, Any], snapshot: dict[str, Any],
 ) -> tuple[list[str], bool]:
@@ -752,6 +763,8 @@ def _permission_codes(
                     or (action in AUDIT_LIST_ACTIONS and resource in audit_buckets
                         and _listing_scoped(statement.get('Condition'), prefixes))
                     or (action in ROLE_READS and resource == role and role)
+                    or (action == 's3:ListBucket' and _effect_listing(
+                        resource, statement.get('Condition'), effects))
                 )
                 if not in_scope:
                     codes.append('permissions-exceed-allowlist')

@@ -32,7 +32,9 @@ The example reports are synthetic; they provide no production assurance.
    separate deploy role with inline policies only. Allow only the operations
    named in controls, scoped to the exact effect, audit prefixes, configuration
    reads and the role's own inspection. Scope audit listings with `s3:prefix` to
-   `decisions/*` and `ops/*`.
+   `decisions/*` and `ops/*`, and allow `s3:ListBucket` on the target bucket only with
+   `StringEquals` `s3:prefix` set to `releases/current.json`, so teardown can confirm
+   the deleted key is absent.
 5. Keep the target bucket **unversioned** with expiration of the effect within
    seven days. The example refuses a versioned or suspended target so one delete
    removes all payload bytes. The audit bucket needs versioning and default

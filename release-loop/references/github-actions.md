@@ -493,12 +493,16 @@ limited to their own keys; listing requires `s3:prefix` conditions.
  {"Effect":"Allow","Action":["s3:PutObject","s3:GetObject","s3:DeleteObject"],"Resource":"arn:aws:s3:::example-release-target/releases/current.json"},
  {"Effect":"Allow","Action":["s3:PutObject","s3:GetObject","s3:GetObjectVersion","s3:GetObjectRetention"],"Resource":["arn:aws:s3:::example-release-audit/decisions/*","arn:aws:s3:::example-release-audit/ops/*"]},
  {"Effect":"Allow","Action":["s3:ListBucket","s3:ListBucketVersions"],"Resource":"arn:aws:s3:::example-release-audit","Condition":{"StringLike":{"s3:prefix":["decisions/*","ops/*"]}}},
+ {"Effect":"Allow","Action":"s3:ListBucket","Resource":"arn:aws:s3:::example-release-target","Condition":{"StringEquals":{"s3:prefix":"releases/current.json"}}},
  {"Effect":"Allow","Action":["s3:GetBucketPolicy","s3:GetBucketVersioning","s3:GetBucketObjectLockConfiguration","s3:GetLifecycleConfiguration"],"Resource":["arn:aws:s3:::example-release-audit","arn:aws:s3:::example-release-target"]},
  {"Effect":"Allow","Action":["iam:GetRole","iam:ListRolePolicies","iam:GetRolePolicy","iam:ListAttachedRolePolicies"],"Resource":"arn:aws:iam::123456789012:role/example-deploy"}
 ]}
 ```
 
-`s3:GetObjectRetention` on the audit prefixes is needed to see lock fields in
+`s3:ListBucket` on the target bucket, limited by `StringEquals` on `s3:prefix` to
+the effect's exact key, lets teardown see a deleted key as Not Found; without it
+S3 answers 403 and teardown cannot confirm removal. `s3:GetObjectRetention` on
+the audit prefixes is needed to see lock fields in
 object heads. An absent field must refuse; never infer retention from defaults.
 The role cannot change lock, lifecycle, versioning, retention or bucket policies.
 Create `target-policy.json` to deny all other writers, including administrators. The explicit `s3:*` deny also excludes their reads
