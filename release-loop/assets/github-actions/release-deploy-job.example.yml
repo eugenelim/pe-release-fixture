@@ -486,6 +486,12 @@ jobs:
               Path('work/observed.json').write_text(json.dumps([{'id': 'example-payload', 'state': 'present', 'digest': b['effects'][0]['payload_sha256'], 'marker': b['marker'], 'write_time': h['LastModified'], 'operation_id': h['ETag']}]), encoding='utf-8')
           PY
           aws s3api delete-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_TARGET_BUCKET" --key releases/current.json > work/deletion.json
+          # Record torn-down only after the provider reports the object absent.
+          if aws s3api head-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_TARGET_BUCKET" --key releases/current.json > /dev/null 2> work/absence.err; then
+            echo "effect still present after delete" >&2
+            exit 1
+          fi
+          grep -q 'Not Found' work/absence.err
           touch work/torn-down
       - id: ops
         if: always() && steps.audit.outcome == 'success'

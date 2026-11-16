@@ -11,6 +11,8 @@ jobs:
     permissions:
       contents: read
       actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Collect committed synthetic evidence
@@ -19,6 +21,9 @@ jobs:
           set -euo pipefail
           mkdir candidate
           cp release-loop/assets/image-only-ci-caller/* candidate/
+          # Fixture adaptation: real provenance and the owner's operations note as evidence.
+          cp release/operations-note.md candidate/operations-note.md
+          gh attestation verify candidate/image-manifest.json --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-build.yml" --format json > candidate/provenance-attestation.json
           python3 - <<'PY'
           """Illustrate writing a candidate from collected, local CI evidence."""
           import importlib.util
@@ -55,7 +60,12 @@ jobs:
               evidence["sha256"] = handoff.hash_evidence(root, evidence["locator"])
               evidence["observed_at"] = now
               evidence["subjects"] = [{"id": "app", "sha256": digest}]
-          for check in candidate["checks"]:
+          note = dict(candidate["evidence"][0])
+          note.update(id="operations-note", kind="operations-note", locator="operations-note.md")
+          candidate["evidence"].append(note)
+          for evidence in candidate["evidence"]:
+              evidence["sha256"] = handoff.hash_evidence(root, evidence["locator"])
+                    for check in candidate["checks"]:
               check["subjects"] = [{"id": "app", "sha256": digest}]
 
           def emit(value: Any, indent: int = 0) -> str:

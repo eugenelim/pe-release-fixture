@@ -91,7 +91,7 @@ jobs:
           assert item['digest'] == 'sha256:' + hashlib.sha256(raw).hexdigest()
           with zipfile.ZipFile('work/artifact.zip') as archive:
               names = archive.namelist()
-              expected = {'release-handoff.yaml', 'admission.json', 'image-manifest.json', 'provenance-attestation.json', 'test-report.json', 'security-report.json', 'approved-procedure.txt', 'trusted-policy.json', 'README.md', 'ci-workflow.example.yml'}
+              expected = {'release-handoff.yaml', 'admission.json', 'image-manifest.json', 'provenance-attestation.json', 'test-report.json', 'security-report.json', 'approved-procedure.txt', 'trusted-policy.json', 'README.md', 'ci-workflow.example.yml', 'operations-note.md'}
               assert len(names) == len(set(names)) and set(names) == expected
               assert sum(i.file_size for i in archive.infolist()) <= 1048576
               assert all((i.external_attr >> 16) & 0o170000 != 0o120000 for i in archive.infolist())
@@ -487,6 +487,12 @@ jobs:
               Path('work/observed.json').write_text(json.dumps([{'id': 'example-payload', 'state': 'present', 'digest': b['effects'][0]['payload_sha256'], 'marker': b['marker'], 'write_time': h['LastModified'], 'operation_id': h['ETag']}]), encoding='utf-8')
           PY
           aws s3api delete-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_TARGET_BUCKET" --key releases/current.json > work/deletion.json
+          # Record torn-down only after the provider reports the object absent.
+          if aws s3api head-object --expected-bucket-owner "$RELEASE_CLOUD_ACCOUNT" --bucket "$RELEASE_TARGET_BUCKET" --key releases/current.json > /dev/null 2> work/absence.err; then
+            echo "effect still present after delete" >&2
+            exit 1
+          fi
+          grep -q 'Not Found' work/absence.err
           touch work/torn-down
       - id: ops
         if: always() && steps.audit.outcome == 'success'

@@ -1,0 +1,28 @@
+# Fixture operations note
+
+Owner: eugenelim (repository owner and AWS sandbox owner). Recorded 2026-11-15.
+
+## Target and prior state
+- The only effect is the object `releases/current.json` in a target bucket created on 2026-11-15 for this fixture alone. No other system reads or writes it.
+- The bucket policy denies every S3 action on that key to every principal except the deploy role, so only this workflow can create it.
+- The bucket is unversioned and expires objects after one day.
+- Before each run the key is absent, or it holds a prior run's bytes marked with that run's admission. Overwriting it loses no state another system needs.
+
+## Recovery
+- A failed, cancelled or uncertain run is reconciled before any retry. The agent observes the key and runs `github_release.py reconcile` with the run, jobs, observation, audit listing and ops record.
+- `retry-allowed` means a new dispatch with a new approval. `proceed-to-observe` means the effect is applied. `pause` escalates to the owner, who either deletes the object or adds the run id to `reconciled_runs` through a reviewed pull request.
+- Recovery deadline: the same working day. After one day the target lifecycle removes any leftover object anyway.
+
+## Cost bound
+- Controls allow at most 20 mutating executions per one-day window.
+- Each execution makes one PUT, one GET and one DELETE on one object of at most 1,024 bytes, plus one decision write and one ops write of a few kilobytes each.
+- The worst case per day is under 100 S3 requests and well under 1 MB stored, a cost of less than USD 0.01.
+- The runner job is capped at 20 minutes and the AWS CLI at 3 attempts.
+
+## Audit retention
+- Decision and ops objects are deliberately kept: they are the immutable decision log and the execution count, so no lifecycle rule expires them.
+- Object Lock compliance mode holds each version for one day. After that only a bucket-policy change by the owner allows deletion.
+- Retention owner: eugenelim. Planned end: when the fixture is retired, the owner removes the deny statements and deletes the bucket after the last retention date. Expected size: under 1 MB in total.
+
+## Classification
+- Non-production AWS sandbox account with no real user data and no production path, attested by the owner.

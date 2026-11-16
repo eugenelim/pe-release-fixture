@@ -1,0 +1,18 @@
+# Fixture-only: attest the committed synthetic payload so provenance is real.
+name: Attest fixture payload
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: release-loop/assets/image-only-ci-caller/image-manifest.json
