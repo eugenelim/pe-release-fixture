@@ -104,7 +104,27 @@ jobs:
           python3 -m zipfile -e work/artifact.zip work
           # Policy and controls come from the protected checkout.
           cp release-loop/assets/image-only-ci-caller/trusted-policy.json work/trusted-policy.json
-          cp release-controls.json work/controls.json
+          python3 - <<'CONTROLS'
+          """Render protected environment values without committing private identifiers."""
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+          for stream in (sys.stdout, sys.stderr):
+              stream.reconfigure(encoding="utf-8")
+          rendered = Path("release-controls.template.json").read_text(encoding="utf-8")
+          for placeholder, value in (
+              ("__TARGET_BUCKET__", os.environ["RELEASE_TARGET_BUCKET"]),
+              ("__AUDIT_BUCKET__", os.environ["RELEASE_AUDIT_BUCKET"]),
+              ("__ROLE_NAME__", os.environ["RELEASE_ROLE_ARN"].rsplit("/", 1)[-1]),
+          ):
+              rendered = rendered.replace(placeholder, value)
+          if re.search(r"__[A-Z][A-Z0-9_]*__", rendered):
+              raise ValueError("unresolved controls placeholder")
+          json.loads(rendered)
+          Path("work/controls.json").write_text(rendered, encoding="utf-8")
+          CONTROLS
           mkdir work/checkout
           cp -R .github work/checkout/
           cp -R release-loop work/release-loop

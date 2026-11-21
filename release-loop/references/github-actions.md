@@ -45,7 +45,7 @@ There is no weaker fallback.
 | Control | `met` only when | Codes when not met |
 | --- | --- | --- |
 | `trusted-execution` | The prepare and deploy workflows trigger only on `workflow_dispatch` and the deploy-job workflow only on `workflow_call`; the deploy workflow has one job, which calls the deploy-job workflow by its local `./` path and passes secrets by name; every workflow and job declares `permissions`, the prepare job's set is `contents: read` and `actions: read` at most, and the deploy job's set is a subset of `contents: read`, `actions: read`, `id-token: write`; every `uses:` (step or reusable workflow) is a local `./` path, `owner/repo[/path]@<40-hex>` or `docker://…@sha256:<64-hex>`; no `secrets: inherit`; no `run:` text contains `${{`; the release branch's active rules block non-fast-forward updates and deletion and require a pull request with at least one approving review | `untrusted-trigger`, `permissions-broad`, `permissions-undeclared`, `unpinned-action`, `secrets-inherited`, `expression-in-run`, `branch-unprotected` |
-| `candidate-binding` | The deploy-job workflow's single job has steps with ids `verify-admission`, `bind`, `credentials`, `budget`, `audit` and `recheck` in that order before every step whose id starts `mutate-`; no prerequisite or `mutate-` step sets `continue-on-error`; mutation conditions contain no `always()`, `failure()` or `cancelled()` override; the job's `environment` equals the controls environment; the dispatch inputs are exactly `prepare_run_id`, `admission_sha256` and `pre_deploy_reviews`, passed unchanged to the deploy-job workflow | `binding-step-missing`, `binding-order`, `mutation-continues-on-error`, `environment-mismatch`, `inputs-mismatch` |
+| `candidate-binding` | The deploy-job workflow's single job has steps with ids `verify-admission`, `bind`, `credentials`, `budget`, `audit` and `recheck` in that order before every step whose id starts `mutate-`; no prerequisite or `mutate-` step sets `continue-on-error`; no prerequisite or `mutate-` step has an `if` condition; the job's `environment` equals the controls environment; the dispatch inputs are exactly `prepare_run_id`, `admission_sha256` and `pre_deploy_reviews`, passed unchanged to the deploy-job workflow | `binding-step-missing`, `binding-order`, `mutation-continues-on-error`, `environment-mismatch`, `inputs-mismatch` |
 | `human-approval` | The environment has a `required_reviewers` rule whose reviewers are all users (at least one), `prevent_self_review: true`, `can_admins_bypass: false`, and a deployment branch policy with `protected_branches: true`; the agent is a GitHub App and is not a reviewer; the app holds none of `administration`, `environments`, `secrets`, `actions_variables`, `workflows` or `contents: write` | `reviewers-missing`, `team-reviewer-unsupported`, `self-review-allowed`, `admin-bypass`, `branch-policy-open`, `agent-is-reviewer`, `agent-kind-unsupported`, `agent-can-reconfigure` |
 | `serialization` | The deploy-job workflow job's `concurrency.group` equals the controls `concurrency_group` and `cancel-in-progress` is `false`; the target policy of every effect resource denies every write action to every principal other than the deploy role | `concurrency-missing`, `cancel-in-progress`, `writers-not-excluded` |
 | `credentials` | The role trust policy has one statement: `Allow` `sts:AssumeRoleWithWebIdentity` for the GitHub OIDC provider principal, with `StringEquals` on the audience and on `sub` equal to `repo:<owner>/<name>:environment:<env>:job_workflow_ref:<owner>/<name>/<deploy_job_workflow>@refs/heads/<release_branch>` or its immutable form `repo:<owner>@<owner-id>/<name>@<repository_id>:…`; the snapshot's OIDC subject template includes exactly `repo`, `context` and `job_workflow_ref`; the mutable-name form also needs `StringEquals` on `repository_id`; every role permission statement is `Allow`, with actions in `allowed_actions` and resources only the effect resources, the audit store's decision and ops prefixes, read-only configuration reads of the audit and target stores, and read-only inspection of the role itself (`iam:GetRole`, `iam:ListRolePolicies`, `iam:GetRolePolicy`, `iam:ListAttachedRolePolicies` on its own ARN); the role has inline policies only, so no attached managed policy exists to inspect; no action or resource is `*` | `trust-open`, `trust-subject-mismatch`, `subject-template-mismatch`, `repository-id-unpinned`, `permissions-exceed-allowlist`, `wildcard-permission` |
@@ -76,7 +76,12 @@ Refusals: `admission-stale`, `admission-digest-mismatch`, `target-mismatch`, `wo
 
 ### Budget before audit
 
-The `credentials` step then obtains cloud credentials through OIDC. The `budget` step lists every version under the decision and ops prefixes for the environment, following every page; `github_release.py budget --controls CONTROLS --listing LIST --now T --root ROOT` refuses, before anything is written, `execution-limit` when the listing already holds `max_executions` decision versions written within `budget_window_days` before `T`, `listing-incomplete` when any page is truncated or missing, and `prior-unreconciled` when any prior decision for the environment, at any age, has no terminal ops record and its run id is not in the controls `reconciled_runs` list. The audit store never expires decision or ops objects, so that history stays complete.
+The `credentials` step then obtains cloud credentials through OIDC. The `budget` step lists every version under the decision and ops prefixes for the environment, following every page; `github_release.py budget --controls CONTROLS --listing LIST --now T --root ROOT` refuses, before anything is written, `execution-limit` when the listing already holds `max_executions` decision versions written within `budget_window_days` before `T`, `listing-incomplete` when any page is truncated or missing or either required history stream is absent, and `prior-unreconciled` when any prior decision for the environment, at any age, has no terminal ops record and its run id is not in the controls `reconciled_runs` list. The audit store never expires decision or ops objects, so that history stays complete.
+
+Each stream must carry `Prefix` equal to its bucket-relative decision or ops
+prefix plus the environment and `/` on every page. Both streams are required,
+including empty ones. Native empty pages may omit `Versions` and `DeleteMarkers`.
+Continuation markers must chain within one prefix through its final page.
 
 A terminal ops record is written by every run that wrote a decision, in a final `ops` step guarded `if: always() && steps.audit.outcome == 'success'`, with outcome `no-mutation`, `mutated`, `torn-down` or `failed` and the provider operation ids; a run stopped before that step leaves its decision unreconciled until the owner adds its run id to `reconciled_runs` through a reviewed change to the controls file. 
 
@@ -127,6 +132,12 @@ Each command emits one JSON object; exit 0 is success (`ready`, a written bindin
 
 ## Capture settings
 
+Commit `controls.example.json` as `release-controls.template.json` with the
+three cloud placeholders intact. The recipe renders `work/controls.json` from
+`RELEASE_TARGET_BUCKET`, `RELEASE_AUDIT_BUCKET` and the final role name in
+`RELEASE_ROLE_ARN`, exactly as the protected job does. Never commit rendered
+controls.
+
 Run the following Bash commands on an authorized capture host, then repeat
 inside the protected job after credentials and the decision write. Use
 `GITHUB_TOKEN` in the job or an app installation token supplied as that variable
@@ -148,7 +159,7 @@ export AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""
 ENVIRONMENT=sandbox
 BRANCH=main
 APP=example-agent
-ROLE_NAME=example-deploy
+ROLE_NAME="${RELEASE_ROLE_ARN##*/}"
 # URL-encode environment, branch and app if adopting names with reserved bytes.
 curl --fail --silent --show-error -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY" -o work/repository.json
 curl --fail --silent --show-error -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/environments/$ENVIRONMENT" -o work/environment.json
@@ -186,6 +197,7 @@ aws s3api get-bucket-lifecycle-configuration --expected-bucket-owner "$RELEASE_C
 python3 - <<'PYTHON'
 """Bundle successful raw responses under the checker's source names."""
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -204,12 +216,32 @@ snapshot["iam_role_policies"] = {
 snapshot["audit_store"] = {key: read("audit-" + name) for key, name in (
     ("versioning", "versioning"), ("object_lock", "lock"),
     ("lifecycle", "lifecycle"), ("policy", "policy"))}
-snapshot["target_policy"] = {"example-release-target": read("target-policy")}
-snapshot["target_lifecycle"] = {"example-release-target": {
+snapshot["target_policy"] = {os.environ["RELEASE_TARGET_BUCKET"]: read("target-policy")}
+snapshot["target_lifecycle"] = {os.environ["RELEASE_TARGET_BUCKET"]: {
     "versioning": read("target-versioning"), "lifecycle": read("target-lifecycle")}}
 Path("work/live.json").write_text(json.dumps(snapshot), encoding="utf-8")
 PYTHON
-cp release-controls.json work/controls.json
+python3 - <<'CONTROLS'
+"""Render protected environment values without committing private identifiers."""
+import json
+import os
+import re
+import sys
+from pathlib import Path
+for stream in (sys.stdout, sys.stderr):
+    stream.reconfigure(encoding="utf-8")
+rendered = Path("release-controls.template.json").read_text(encoding="utf-8")
+for placeholder, value in (
+    ("__TARGET_BUCKET__", os.environ["RELEASE_TARGET_BUCKET"]),
+    ("__AUDIT_BUCKET__", os.environ["RELEASE_AUDIT_BUCKET"]),
+    ("__ROLE_NAME__", os.environ["RELEASE_ROLE_ARN"].rsplit("/", 1)[-1]),
+):
+    rendered = rendered.replace(placeholder, value)
+if re.search(r"__[A-Z][A-Z0-9_]*__", rendered):
+    raise ValueError("unresolved controls placeholder")
+json.loads(rendered)
+Path("work/controls.json").write_text(rendered, encoding="utf-8")
+CONTROLS
 mkdir -p work/checkout
 cp -R .github work/checkout/
 python3 release-loop/scripts/github_release.py readiness --root work --controls controls.json --snapshot live.json --prepare-workflow checkout/.github/workflows/release-prepare.yml --deploy-workflow checkout/.github/workflows/release-deploy.yml --deploy-job-workflow checkout/.github/workflows/release-deploy-job.yml

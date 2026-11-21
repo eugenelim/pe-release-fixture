@@ -13,9 +13,12 @@ The example reports are synthetic; they provide no production assurance.
    curl, OpenSSL and the AWS CLI must be available (they ship on `ubuntu-latest`).
 2. Copy the three `.example.yml` files to `.github/workflows/`, dropping
    `.example` from their names. Copy `controls.example.json` to
-   `release-controls.json`. Replace its repository, repository id, app identity,
-   role name, owner attestation, and placeholder bucket ARNs with owner-reviewed
-   fixture values. Keep the workflow paths, `sandbox` environment,
+   `release-controls.template.json`. Set its repository, repository id, app identity
+   and owner attestation to owner-reviewed fixture values. Keep `__TARGET_BUCKET__`,
+   `__AUDIT_BUCKET__` and `__ROLE_NAME__` as placeholders. The protected job renders
+   `work/controls.json` from the bucket secrets and the final name in
+   `RELEASE_ROLE_ARN`, including when the role ARN has a path. It refuses unresolved
+   placeholders or invalid JSON. Keep the workflow paths, `sandbox` environment,
    `example-sandbox` account label, `example-release` concurrency group, `app`
    payload component and `example-payload` effect id aligned with the templates.
    Audit prefixes remain bucket-qualified ARNs in controls; S3 keys contain

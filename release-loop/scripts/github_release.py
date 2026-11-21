@@ -633,9 +633,9 @@ def _binding_codes(controls: dict[str, Any], workflows: dict[str, Any]) -> list[
                  if isinstance(name, str) and name.startswith('mutate-')]
     if positions != sorted(positions) or not mutations or any(
         index <= max(positions, default=-1)
-        or re.search(r'\b(?:always|failure|cancelled)\s*\(', str(steps[index].get('if', '')))
         for index in mutations
-    ):
+    ) or any('if' in step for step in steps
+             if step.get('id') in chain or str(step.get('id', '')).startswith('mutate-')):
         codes.append('binding-order')
     if any('continue-on-error' in step for step in steps
            if step.get('id') in chain or str(step.get('id', '')).startswith('mutate-')):
@@ -1317,7 +1317,7 @@ def _decision_key(controls: dict[str, Any], binding: dict[str, Any],
             + str(binding['run_id']) + '-' + str(binding['run_attempt']) + '.json')
 
 
-def _versions(listing: Any) -> list[dict[str, Any]]:
+def _versions(controls: dict[str, Any], listing: Any) -> list[dict[str, Any]]:
     """Validate a complete saved page stream and keep noncurrent object versions.
 
     Ops versions may carry a `record` containing the separately captured body.
@@ -1327,14 +1327,23 @@ def _versions(listing: Any) -> list[dict[str, Any]]:
     try:
         if not isinstance(listing, list) or not listing:
             raise ValueError('pages required')
+        required = {_audit_key_prefix(controls, kind) + controls['environment'] + '/'
+                    for kind in ('decision', 'ops')}
+        covered = set()
+        active_prefix = ''
         versions = []
         seen = set()
         expected_markers = ('', '')
         for index, page in enumerate(listing):
             if (not isinstance(page, dict) or type(page.get('IsTruncated')) is not bool
-                    or not isinstance(page.get('Versions'), list)
+                    or not isinstance(page.get('Versions', []), list)
                     or not isinstance(page.get('DeleteMarkers', []), list)):
                 raise ValueError('malformed page')
+            prefix = page.get('Prefix')
+            if (not isinstance(prefix, str) or prefix not in required
+                    or (expected_markers != ('', '') and prefix != active_prefix)):
+                raise ValueError('wrong prefix')
+            active_prefix = prefix
             markers = (page.get('KeyMarker', ''), page.get('VersionIdMarker', ''))
             if markers != expected_markers:
                 raise ValueError('missing page')
@@ -1346,8 +1355,11 @@ def _versions(listing: Any) -> list[dict[str, Any]]:
                 expected_markers = (page['NextKeyMarker'], page['NextVersionIdMarker'])
             if page['IsTruncated'] and index + 1 == len(listing):
                 raise ValueError('missing continuation')
-            for item in page['Versions'] + page.get('DeleteMarkers', []):
+            if not page['IsTruncated']:
+                covered.add(prefix)
+            for item in page.get('Versions', []) + page.get('DeleteMarkers', []):
                 if (not isinstance(item, dict) or not admission.text(item.get('Key'))
+                        or not item['Key'].startswith(prefix)
                         or not admission.text(item.get('VersionId'))
                         or type(item.get('IsLatest')) is not bool):
                     raise ValueError('malformed version')
@@ -1356,7 +1368,9 @@ def _versions(listing: Any) -> list[dict[str, Any]]:
                 if identity in seen:
                     raise ValueError('duplicate version')
                 seen.add(identity)
-            versions.extend(page['Versions'])
+            versions.extend(page.get('Versions', []))
+        if covered != required:
+            raise ValueError('missing history stream')
         return versions
     except (ValueError, TypeError, KeyError):
         raise Refusal('listing-incomplete', 'refused') from None
@@ -1365,7 +1379,7 @@ def _versions(listing: Any) -> list[dict[str, Any]]:
 def _decision_versions(controls: dict[str, Any], listing: Any,
                        now: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Select all decisions for this environment and those in the inclusive window."""
-    versions = _versions(listing)
+    versions = _versions(controls, listing)
     try:
         maximum, days = controls['max_executions'], controls['budget_window_days']
         if (type(maximum) is not int or not 1 <= maximum <= 100
@@ -1412,7 +1426,7 @@ def budget(args: Any, parsed: dict[str, Any]) -> dict[str, Any]:
     decisions, current = _decision_versions(controls, parsed['listing'], args.now)
     if len(current) >= controls['max_executions']:
         raise Refusal('execution-limit', 'refused')
-    versions = _versions(parsed['listing'])
+    versions = _versions(controls, parsed['listing'])
     for item in decisions:
         name = item['Key'].rsplit('/', 1)[-1].removesuffix('.json')
         run_id, attempt = (int(part) for part in name.split('-'))
@@ -1592,6 +1606,8 @@ def _jobs_unstarted(response: Any, binding: dict[str, Any]) -> bool:
 def reconcile(args: Any, parsed: dict[str, Any]) -> dict[str, Any]:
     """Report observed effects; permit retries only with terminal run and ops evidence."""
     binding, controls, run = (parsed[name] for name in ('binding', 'controls', 'run'))
+    _, current = _decision_versions(
+        controls, parsed['audit-listing'], admission.clock_time(None))
     states = _effect_states(binding, controls, parsed['observed'])
     report: dict[str, Any] = {'status': 'pause', 'effects': states, 'issues': []}
     if (run.get('id') != binding.get('run_id')
@@ -1604,8 +1620,6 @@ def reconcile(args: Any, parsed: dict[str, Any]) -> dict[str, Any]:
     elif not states or any(item['state'] != 'absent' for item in states):
         report['issues'] = [{'code': 'effect-unknown'}]
     else:
-        _, current = _decision_versions(
-            controls, parsed['audit-listing'], admission.clock_time(None))
         if len(current) >= controls['max_executions']:
             report['issues'] = [{'code': 'execution-limit'}]
         else:
