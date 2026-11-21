@@ -22,7 +22,9 @@ Owner: eugenelim (repository owner and AWS sandbox owner). Recorded 2026-11-15.
 ## Audit retention
 - Decision and ops objects are deliberately kept: they are the immutable decision log and the execution count, so no lifecycle rule expires them.
 - Object Lock compliance mode holds each version for one day. After that only a bucket-policy change by the owner allows deletion.
-- Retention owner: eugenelim. Planned end: when the fixture is retired, the owner removes the deny statements and deletes the bucket after the last retention date. Expected size: under 1 MB in total.
+- Retention owner: eugenelim. Retirement date: 2026-12-31. On that date, or earlier under the stop rule, the owner removes the deny statements, deletes the decision and ops versions once their retention has ended, and deletes both buckets and the role.
+- Lifetime bound: from 2026-11-15 to 2026-12-31 the 20-per-day cap allows at most 940 executions, so at most about 1,900 decision and ops versions of a few kilobytes each: under 5 MB stored and under 100,000 requests in total, less than USD 0.10.
+- Stop rule: if the audit store holds more than 2,000 versions, the owner sets `max_executions` to 1 through a reviewed change and retires the fixture early.
 
 ## Classification
 - Non-production AWS sandbox account with no real user data and no production path, attested by the owner.
