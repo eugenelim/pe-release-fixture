@@ -8,7 +8,7 @@ demonstration bytes, not a runnable image. No image is built or pushed by valida
 Run from the repository root with Python 3.11 or newer:
 
 ```sh
-python3 packs/release-engineering/.apm/skills/release-loop/scripts/release_handoff.py validate release-handoff.yaml --root packs/release-engineering/.apm/skills/release-loop/assets/image-only-ci-caller --policy trusted-policy.json --now 2026-01-01T12:30:00Z
+python3 packs/platform-engineering/.apm/skills/release-loop/scripts/release_handoff.py validate release-handoff.yaml --root packs/platform-engineering/.apm/skills/release-loop/assets/image-only-ci-caller --policy trusted-policy.json --now 2026-01-01T12:30:00Z
 ```
 
 Expected exit code: `0`. Expected stdout (one JSON object):

@@ -18,6 +18,13 @@ connection. Captured settings are evidence, not proof. An agent's snapshot can
 report ready while live settings block the protected job. The job captures its
 own settings and uses its own checked-out workflows before any mutation.
 
+Captured target and audit bucket policies must contain no `Allow` statements.
+Grants belong only in the checked inline role policies. Any captured bucket
+policy grant blocks `credentials` with `permissions-exceed-allowlist` and
+`isolation` with `role-reaches-beyond-effects`, even if the grant is in scope.
+Grants in other buckets' policies are outside what readiness can capture;
+the owner must exclude those grants separately before using the deploy role.
+
 Only `aws-s3-object-lock` is verified. Logs, artifacts and attestations do not
 satisfy audit. The no-real-data and no-production-path statement is an owner
 attestation in addition to permission checks, never a substitute for them.

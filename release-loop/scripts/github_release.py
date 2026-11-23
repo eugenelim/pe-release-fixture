@@ -449,8 +449,8 @@ SOURCE_CONTROLS = {
     'agent_app': ('human-approval',),
     'iam_role': ('credentials', 'serialization', 'audit', 'isolation'),
     'iam_role_policies': ('credentials', 'audit', 'cost', 'isolation'),
-    'audit_store': ('audit',),
-    'target_policy': ('serialization',),
+    'audit_store': ('audit', 'credentials', 'isolation'),
+    'target_policy': ('serialization', 'credentials', 'isolation'),
     'target_lifecycle': ('cost',),
 }
 WORKFLOW_CONTROLS = (
@@ -571,8 +571,9 @@ def _execution_codes(controls: dict[str, Any], snapshot: dict[str, Any],
     for name in ('prepare', 'deploy', 'deploy-job'):
         workflow = _map(workflows.get(name))
         event = workflow.get('on')
+        events = set(event) if isinstance(event, dict) else set(_strings(event))
         expected = 'workflow_call' if name == 'deploy-job' else 'workflow_dispatch'
-        if event != expected and set(_map(event)) != {expected}:
+        if events != {expected}:
             codes.append('untrusted-trigger')
         allowed = {'contents': 'read', 'actions': 'read'}
         if name != 'prepare':
@@ -743,6 +744,11 @@ def _permission_codes(
     audit_buckets = {_s3(prefix)[1] for prefix in prefixes} - {''}
     statements, complete = _inline_statements(snapshot)
     if not complete or cloud.get('provider') != 'aws':
+        codes.append('permissions-exceed-allowlist')
+    policies = [*_map(snapshot.get('target_policy')).values(),
+                _map(snapshot.get('audit_store')).get('policy')]
+    if any(statement.get('Effect') == 'Allow' for policy in policies
+           for statement in _statements(_map(policy).get('Policy', policy))):
         codes.append('permissions-exceed-allowlist')
     allowed = _strings(cloud.get('allowed_actions'))
     for statement in statements:
@@ -1540,6 +1546,7 @@ def recheck(args: Any, root: Path, parsed: dict[str, Any],
                            str(identity.get('Arn', '')))
     if (args.expect_role_arn_env != controls['cloud']['role_secret']
             or args.expect_account_env != controls['cloud']['account_secret']
+            or role != parsed['live-snapshot']['iam_role']['Role']['Arn']
             or not match or not session or match[1] != account or session[1] != account
             or match[2].rsplit('/', 1)[-1] != controls['cloud']['role_name']
             or session[2] != controls['cloud']['role_name']
