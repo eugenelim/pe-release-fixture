@@ -26,6 +26,7 @@ jobs:
           # Fixture adaptation: the reviewed live plan bundle and a policy requiring its checks.
           cp -R release/iac candidate/iac
           cp release/trusted-policy.json candidate/trusted-policy.json
+          gh attestation verify candidate/iac/bundle.json --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-build.yml" --source-digest "$GITHUB_SHA" --format json > candidate/iac-provenance-attestation.json
           gh attestation verify candidate/image-manifest.json --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-build.yml" --source-digest "$GITHUB_SHA" --format json > candidate/provenance-attestation.json
           python3 - <<'PY'
           """Illustrate writing a candidate from collected, local CI evidence."""
@@ -75,16 +76,25 @@ jobs:
           plan = {"id": "infrastructure", "sha256": bundle_digest}
           candidate["components"].append({"id": "infrastructure", "kind": "terraform-plan", "plan_bundle": "plan-bundle"})
           for evidence in candidate["evidence"]:
-              if evidence["id"] != "image-artifact":
+              if evidence["id"] in ("approved-procedure", "operations-note"):
                   evidence["subjects"].append(dict(plan))
-          bundle = dict(candidate["evidence"][0])
-          bundle.update(id="plan-bundle", kind="terraform-plan-bundle", locator="iac/bundle.json",
-                        media_type="application/json", sha256=bundle_digest, subjects=[dict(plan)])
-          candidate["evidence"].append(bundle)
+          by_id = {evidence["id"]: evidence for evidence in candidate["evidence"]}
+          def plan_evidence(base, **fields):
+              item = dict(by_id[base])
+              item.update(subjects=[dict(plan)], **fields)
+              item["sha256"] = handoff.hash_evidence(root, item["locator"])
+              candidate["evidence"].append(item)
+          plan_evidence("image-artifact", id="plan-bundle", kind="terraform-plan-bundle",
+                        locator="iac/bundle.json", media_type="application/json")
+          plan_evidence("provenance", id="plan-provenance", locator="iac-provenance-attestation.json")
+          plan_evidence("test-report", id="plan-validation", locator="iac/validation.txt", media_type="text/plain")
+          plan_evidence("security-report", id="plan-review", locator="iac/review-result.json")
+          candidate["provenance"].append("plan-provenance")
           for check in list(candidate["checks"]):
               extra = json.loads(json.dumps(check))
               extra["id"] = "plan-" + check["id"]
               extra["subjects"] = [dict(plan)]
+              extra["evidence"] = ["plan-validation" if check["stage"] == "validation" else "plan-review"]
               candidate["checks"].append(extra)
           candidate["phases"][0]["components"].append("infrastructure")
 
