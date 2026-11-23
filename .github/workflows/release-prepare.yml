@@ -23,6 +23,9 @@ jobs:
           cp release-loop/assets/image-only-ci-caller/* candidate/
           # Fixture adaptation: real provenance and the owner's operations note as evidence.
           cp release/operations-note.md candidate/operations-note.md
+          # Fixture adaptation: the reviewed live plan bundle and a policy requiring its checks.
+          cp -R release/iac candidate/iac
+          cp release/trusted-policy.json candidate/trusted-policy.json
           gh attestation verify candidate/image-manifest.json --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-build.yml" --source-digest "$GITHUB_SHA" --format json > candidate/provenance-attestation.json
           python3 - <<'PY'
           """Illustrate writing a candidate from collected, local CI evidence."""
@@ -68,6 +71,22 @@ jobs:
               evidence["sha256"] = handoff.hash_evidence(root, evidence["locator"])
           for check in candidate["checks"]:
               check["subjects"] = [{"id": "app", "sha256": digest}]
+          bundle_digest = handoff.hash_evidence(root, "iac/bundle.json")
+          plan = {"id": "infrastructure", "sha256": bundle_digest}
+          candidate["components"].append({"id": "infrastructure", "kind": "terraform-plan", "plan_bundle": "plan-bundle"})
+          for evidence in candidate["evidence"]:
+              if evidence["id"] != "image-artifact":
+                  evidence["subjects"].append(dict(plan))
+          bundle = dict(candidate["evidence"][0])
+          bundle.update(id="plan-bundle", kind="terraform-plan-bundle", locator="iac/bundle.json",
+                        media_type="application/json", sha256=bundle_digest, subjects=[dict(plan)])
+          candidate["evidence"].append(bundle)
+          for check in list(candidate["checks"]):
+              extra = json.loads(json.dumps(check))
+              extra["id"] = "plan-" + check["id"]
+              extra["subjects"] = [dict(plan)]
+              candidate["checks"].append(extra)
+          candidate["phases"][0]["components"].append("infrastructure")
 
           def emit(value: Any, indent: int = 0) -> str:
               """Write only the reader's block collections and quoted scalars."""

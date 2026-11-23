@@ -1,0 +1,6 @@
+{
+  "provider": "registry.terraform.io/hashicorp/null",
+  "cloud_privileges": [],
+  "state": "new local state",
+  "reversal": "discard unapplied plan; no live resources changed"
+}

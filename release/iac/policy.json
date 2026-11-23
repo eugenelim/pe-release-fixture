@@ -1,0 +1,7 @@
+{
+  "backend": "local",
+  "summary": "ready",
+  "resources": [
+    "null_resource.example"
+  ]
+}

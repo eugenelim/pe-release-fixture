@@ -92,7 +92,7 @@ jobs:
           assert item['digest'] == 'sha256:' + hashlib.sha256(raw).hexdigest()
           with zipfile.ZipFile('work/artifact.zip') as archive:
               names = archive.namelist()
-              expected = {'release-handoff.yaml', 'admission.json', 'image-manifest.json', 'provenance-attestation.json', 'test-report.json', 'security-report.json', 'approved-procedure.txt', 'trusted-policy.json', 'README.md', 'ci-workflow.example.yml', 'operations-note.md'}
+              expected = {'release-handoff.yaml', 'admission.json', 'image-manifest.json', 'provenance-attestation.json', 'test-report.json', 'security-report.json', 'approved-procedure.txt', 'trusted-policy.json', 'README.md', 'ci-workflow.example.yml', 'operations-note.md'} | {'iac/bundle-policy.json', 'iac/bundle.json', 'iac/decision.md', 'iac/dependency-lock.hcl', 'iac/inspection.json', 'iac/main.tf', 'iac/policy.json', 'iac/review-result.json', 'iac/security.json', 'iac/tfplan', 'iac/validation.txt'}
               assert len(names) == len(set(names)) and set(names) == expected
               assert sum(i.file_size for i in archive.infolist()) <= 1048576
               assert all((i.external_attr >> 16) & 0o170000 != 0o120000 for i in archive.infolist())
@@ -103,7 +103,7 @@ jobs:
           PY
           python3 -m zipfile -e work/artifact.zip work
           # Policy and controls come from the protected checkout.
-          cp release-loop/assets/image-only-ci-caller/trusted-policy.json work/trusted-policy.json
+          cp release/trusted-policy.json work/trusted-policy.json
           python3 - <<'CONTROLS'
           """Render protected environment values without committing private identifiers."""
           import json

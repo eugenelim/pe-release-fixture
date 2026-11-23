@@ -1,0 +1,247 @@
+{
+  "schema_version": "iac-plan-bundle.v1",
+  "source": {
+    "repository": "temporary-repository",
+    "snapshot": "input-snapshot"
+  },
+  "request": "native-decision",
+  "constraints": [
+    "native-decision"
+  ],
+  "evidence": [
+    {
+      "id": "native-decision",
+      "kind": "architecture-decision",
+      "locator": "iac/decision.md",
+      "sha256": "sha256:ac5c60bd481c707ac568c77b942b09669c85cce95cbc19a68fcd3361e8e6bb84",
+      "media_type": "text/markdown",
+      "producer": "live-terraform-run",
+      "observed_at": "2026-11-23T06:48:04Z",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ]
+    },
+    {
+      "id": "saved-plan",
+      "kind": "saved-plan",
+      "locator": "iac/tfplan",
+      "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed",
+      "media_type": "application/octet-stream",
+      "producer": "live-terraform-run",
+      "observed_at": "2026-11-23T06:48:04Z",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ]
+    },
+    {
+      "id": "plan-inspection",
+      "kind": "terraform-show-json",
+      "locator": "iac/inspection.json",
+      "sha256": "sha256:170e7512b57f595c1937050868d3fc12a529c7868763c9f5e4ce41080dccc689",
+      "media_type": "application/json",
+      "producer": "live-terraform-run",
+      "observed_at": "2026-11-23T06:48:04Z",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ]
+    },
+    {
+      "id": "dependency-lock",
+      "kind": "dependency-lock",
+      "locator": "iac/dependency-lock.hcl",
+      "sha256": "sha256:0651757ba062a18761324d5f3104add0aa44160d3ecaa8f8b5ecccc98337c81d",
+      "media_type": "text/plain",
+      "producer": "live-terraform-run",
+      "observed_at": "2026-11-23T06:48:04Z",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ]
+    },
+    {
+      "id": "validation-proof",
+      "kind": "check-result",
+      "locator": "iac/validation.txt",
+      "sha256": "sha256:2ff6f7b7b494d0f8d596def971d585d29ee3e06359aa4662e84c1988f7b74cbb",
+      "media_type": "text/plain",
+      "producer": "live-terraform-run",
+      "observed_at": "2026-11-23T06:48:04Z",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ]
+    },
+    {
+      "id": "policy-proof",
+      "kind": "check-result",
+      "locator": "iac/policy.json",
+      "sha256": "sha256:e5357551e72902fd34f3c902587fb063ac8cff2351411c667e68f54bf9c482c0",
+      "media_type": "text/plain",
+      "producer": "live-terraform-run",
+      "observed_at": "2026-11-23T06:48:04Z",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ]
+    },
+    {
+      "id": "security-proof",
+      "kind": "check-result",
+      "locator": "iac/security.json",
+      "sha256": "sha256:6adc284f643442f268a1e0bf332049b26845293c8eff8c60807614219d8680fb",
+      "media_type": "text/plain",
+      "producer": "live-terraform-run",
+      "observed_at": "2026-11-23T06:48:04Z",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ]
+    },
+    {
+      "id": "review-proof",
+      "kind": "check-result",
+      "locator": "iac/review-result.json",
+      "sha256": "sha256:3842d5cec57902bab70e8039a866f0b9da51306862c2b50a3fc937b36ea5b369",
+      "media_type": "text/plain",
+      "producer": "live-terraform-run",
+      "observed_at": "2026-11-23T06:48:04Z",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ]
+    },
+    {
+      "id": "input-snapshot",
+      "kind": "source-snapshot",
+      "locator": "iac/main.tf",
+      "sha256": "sha256:f0e987356c0da2871ce0ffc6a4b016450b387e5da21ead19577b160493152544",
+      "media_type": "text/plain",
+      "producer": "live-terraform-run",
+      "observed_at": "2026-11-23T06:48:04Z",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ]
+    }
+  ],
+  "toolchain": {
+    "engine": "terraform",
+    "version": "1.17.2",
+    "providers": [
+      {
+        "source": "registry.terraform.io/hashicorp/null",
+        "version": "3.3.2"
+      }
+    ],
+    "lock": "dependency-lock"
+  },
+  "target": {
+    "environment": "sandbox",
+    "account": "example-sandbox"
+  },
+  "state": {
+    "backend": "local",
+    "workspace": "default",
+    "new_workspace": "native-decision"
+  },
+  "plan": {
+    "saved_plan": "saved-plan",
+    "inspection": "plan-inspection"
+  },
+  "created_at": "2026-11-23T06:48:04Z",
+  "freshness": {
+    "policy_id": "example-policy",
+    "max_age_seconds": 3600
+  },
+  "checks": [
+    {
+      "id": "validation",
+      "stage": "validation",
+      "status": "pass",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ],
+      "evidence": [
+        "validation-proof"
+      ]
+    },
+    {
+      "id": "policy",
+      "stage": "policy",
+      "status": "pass",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ],
+      "evidence": [
+        "policy-proof"
+      ]
+    },
+    {
+      "id": "security",
+      "stage": "security",
+      "status": "pass",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ],
+      "evidence": [
+        "security-proof"
+      ]
+    },
+    {
+      "id": "review",
+      "stage": "review",
+      "status": "pass",
+      "subjects": [
+        {
+          "id": "saved-plan",
+          "sha256": "sha256:a80eb2cd70413bc45a62dc90818a6dfdd3a16fa1f1fcbb047d9deceaabe9c3ed"
+        }
+      ],
+      "evidence": [
+        "review-proof"
+      ]
+    }
+  ],
+  "effects": {
+    "changes": [
+      {
+        "address": "null_resource.example",
+        "actions": [
+          "create"
+        ]
+      }
+    ],
+    "stateful_impacts": [],
+    "cost": null
+  }
+}
